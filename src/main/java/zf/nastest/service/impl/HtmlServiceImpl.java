@@ -11,13 +11,20 @@ import zf.nastest.service.HtmlService;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 该类是HtmlService接口的实现类，用于处理与html记录相关的业务逻辑。
+ * 使用Spring的事务管理来确保数据操作的一致性。
+ */
 @Service
 public class HtmlServiceImpl implements HtmlService {
 
+    /**
+     * 注入HtmlMapper，用于与数据库进行交互。
+     */
     private final HtmlMapper htmlMapper;
 
     /**
-     * 构造器注入Mapper依赖
+     * 构造器注入Mapper依赖。
      * @param htmlMapper HTML Mapper
      */
     @Autowired
@@ -25,12 +32,16 @@ public class HtmlServiceImpl implements HtmlService {
         this.htmlMapper = htmlMapper;
     }
 
+    /**
+     * 查询所有的html记录，并将结果转换为HtmlDTO列表返回。
+     * 使用只读事务，提高查询性能。
+     * @return 包含所有html记录的HtmlDTO列表
+     */
     @Override
     @Transactional(readOnly = true)
     public List<HtmlDTO> selectHtml() {
         // 1. 查询数据库获取原始数据
         List<HtmlScore> scores = htmlMapper.selectHtml();
-//        System.out.println(scores.toString());
         // 2. 转换为DTO对象
         return scores.stream()
                 .map(this::convertToHtmlDTO)
@@ -38,7 +49,8 @@ public class HtmlServiceImpl implements HtmlService {
     }
 
     /**
-     * 添加 HTML 记录
+     * 添加一个html记录。
+     * 使用事务管理，确保数据的一致性。
      * @param htmlDTO HTML DTO 对象
      * @return 添加后的 HTML DTO 对象
      */
@@ -54,7 +66,8 @@ public class HtmlServiceImpl implements HtmlService {
     }
 
     /**
-     * 删除 HTML 记录
+     * 删除一个html记录。
+     * 使用事务管理，确保数据的一致性。
      * @param id 记录 ID
      */
     @Override
@@ -64,7 +77,8 @@ public class HtmlServiceImpl implements HtmlService {
     }
 
     /**
-     * 更新 HTML 记录
+     * 更新一个html记录。
+     * 使用事务管理，确保数据的一致性。
      * @param htmlDTO HTML DTO 对象
      * @return 更新后的 HTML DTO 对象
      */
@@ -80,7 +94,7 @@ public class HtmlServiceImpl implements HtmlService {
     }
 
     /**
-     * 将HtmlScore实体转换为HtmlDTO
+     * 将HtmlScore实体转换为HtmlDTO。
      * @param entity 数据库实体
      * @return DTO对象
      */
@@ -91,4 +105,4 @@ public class HtmlServiceImpl implements HtmlService {
         dto.setTitle(entity.getTitle());
         return dto;
     }
-}    
+}

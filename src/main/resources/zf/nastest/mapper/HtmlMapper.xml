@@ -4,26 +4,34 @@
 <mapper namespace="zf.nastest.mapper.HtmlMapper">
 
     <!-- 结果映射 -->
+    <!-- 定义一个结果映射，将数据库查询结果映射到HtmlScore实体类 -->
     <resultMap id="HtmlResultMap" type="zf.nastest.entity.HtmlScore">
+        <!-- 将数据库中的id字段映射到实体类的id属性 -->
         <id property="id" column="id"/>
+        <!-- 将数据库中的link字段映射到实体类的link属性 -->
         <result property="link" column="link"/>
+        <!-- 将数据库中的title字段映射到实体类的title属性 -->
         <result property="title" column="title"/>
         <!-- 其他字段映射 -->
     </resultMap>
 
+    <!-- 查询所有html记录 -->
     <select id="selectHtml" resultType="zf.nastest.entity.HtmlScore">
         SELECT * FROM html
     </select>
 
+    <!-- 新增一个html记录 -->
     <insert id="insertHtml" parameterType="zf.nastest.entity.HtmlScore">
         INSERT INTO html (link, title)
         VALUES (#{link}, #{title})
     </insert>
 
+    <!-- 根据ID删除一个html记录 -->
     <delete id="deleteHtml" parameterType="java.lang.Long">
         DELETE FROM html WHERE id = #{id}
     </delete>
 
+    <!-- 更新一个html记录 -->
     <update id="updateHtml" parameterType="zf.nastest.entity.HtmlScore">
         UPDATE html
         SET link = #{link},
