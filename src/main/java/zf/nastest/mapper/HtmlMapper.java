@@ -1,6 +1,7 @@
 package zf.nastest.mapper;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.springframework.data.repository.query.Param;
 import zf.nastest.entity.HtmlScore;
 
 import java.util.List;
@@ -13,7 +14,7 @@ public interface HtmlMapper {
     void insertHtml(HtmlScore htmlScore);
 
     // 删除方法
-    void deleteHtml(Long id);
+    void deleteHtml(@Param("id") Long id);
 
     // 更新方法
     void updateHtml(HtmlScore htmlScore);
