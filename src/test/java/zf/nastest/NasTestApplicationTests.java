@@ -12,7 +12,7 @@ class NasTestApplicationTests {
 
     /**
      * 测试方法，用于验证Spring应用上下文是否能够成功加载。
-     * 该方法目前为空，若上下文加载成功，则测试通过。
+     * 该方法目前为空，若上下文加载成功，则测试通过。----
      */
     @Test
     void contextLoads() {
