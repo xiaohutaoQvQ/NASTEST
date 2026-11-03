@@ -1,6 +1,6 @@
 # 飞牛OS (fnOS) NAS BTRFS 存储空间不格式化修复交接文档
 
-**更新时间**：2026-11-03 09:25 CST  
+**更新时间**：2026-11-03 09:56 CST  
 **原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。
 
 ---
@@ -15,7 +15,7 @@
 | **数据盘设备路径** | `/dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（对应 `/dev/dm-0`） |
 | **BTRFS UUID** | `1fba27f1-61a3-4f3b-a155-cc4d2074f016` |
 | **SSD 缓存状态** | 已通过 `lvconvert --yes --splitcache` 永久剥离，当前为纯 HDD 线性逻辑卷（底层 `/dev/md127` -> `/dev/sda1`） |
-| **当前正在运行的后台任务** | **`PID 187739`**：`btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（`--init-csum-tree` 已于 `01:13:14` 完成） |
+| **当前正在运行的后台任务** | **`PID 189471`**：`btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（`09:55:37` 已扫描 `2.55 GB / 5.41 GB` 元数据树，`~47.1%`，`[1/7]`、`[2/7]` 零报错） |
 | **当前任务日志路径** | NAS 本机 `/root/btrfs_readonly_nov3.log`（`--init-csum-tree` 历史日志 `/root/btrfs_init_csum.log`） |
 
 ---
