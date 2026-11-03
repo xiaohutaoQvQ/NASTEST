@@ -1,6 +1,6 @@
 # 飞牛OS (fnOS) NAS BTRFS 存储空间不格式化修复交接文档
 
-**更新时间**：2026-11-03 01:07 CST  
+**更新时间**：2026-11-03 09:25 CST  
 **原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。
 
 ---
@@ -15,8 +15,8 @@
 | **数据盘设备路径** | `/dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（对应 `/dev/dm-0`） |
 | **BTRFS UUID** | `1fba27f1-61a3-4f3b-a155-cc4d2074f016` |
 | **SSD 缓存状态** | 已通过 `lvconvert --yes --splitcache` 永久剥离，当前为纯 HDD 线性逻辑卷（底层 `/dev/md127` -> `/dev/sda1`） |
-| **当前正在运行的后台任务** | **`PID 113903`**：`btrfs check --repair --init-csum-tree /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0` |
-| **当前任务日志路径** | NAS 本机 `/root/btrfs_init_csum.log`（启动脚本 `/root/run_init_csum.sh`） |
+| **当前正在运行的后台任务** | **`PID 187739`**：`btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（`--init-csum-tree` 已于 `01:13:14` 完成） |
+| **当前任务日志路径** | NAS 本机 `/root/btrfs_readonly_nov3.log`（`--init-csum-tree` 历史日志 `/root/btrfs_init_csum.log`） |
 
 ---
 
@@ -54,17 +54,22 @@
 - **根因查明**：
   通过 `btrfs inspect-internal dump-tree -b 45268992` 和 `56279040` 检查发现，`CSUM_TREE` 中残留有**未分配空闲空间的孤儿校验和条目（orphan csum items，如 `3587026944`、`3619020800`）**。这些空间在 `EXTENT_TREE` 和 `FREE_SPACE_TREE` 中已被标记为空闲未分配，但旧 `CSUM_TREE` 里还留着它们的 4 字节校验和；一旦内核把这段空闲空间分配给新文件并扩展前一条 `EXTENT_CSUM` 记录，就会撞上后面残留的孤儿 `EXTENT_CSUM` 条目，触发 `write time tree block corruption`！
 
-### 3. 终极根治操作：已在 NAS 后台启动 `--init-csum-tree`（进行中 ⏳）
+### 3. 终极根治操作：`--init-csum-tree` 已完成 ✅（2026-11-03 01:13:14）
 要同时彻底清除所有残留孤儿校验和（防止写入时重叠）并补齐所有文件缺失的校验和（消除读取时 `some csum missing`），标准且唯一的根治方案是重建校验和树（`--init-csum-tree`）。
-由于此前阻碍 `--init-csum-tree` 的 10 个损坏叶子节点头部已被我们全部修好，现在 `--init-csum-tree` 可以完全无障碍运行！
+由于此前阻碍 `--init-csum-tree` 的 10 个损坏叶子节点头部已被我们全部修好，`--init-csum-tree` 顺利跑完全程！
 
 - **启动时间**：`2026-11-02 12:02:06 CST`
+- **完成时间**：`2026-11-03 01:13:14 CST`（总耗时 `13h 11m`）
 - **后台命令**：
   ```bash
   yes | btrfs check --repair --init-csum-tree /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 >> /root/btrfs_init_csum.log 2>&1
   ```
-- **当前状态**：`PID 113903` 正在 NAS 后台独占运行（`Open count: 0`）。**`Creating a new CRC tree` 全盘扫描与新校验和树写入已 100% 完成**，并通过了 `[1/7] checking root items`（`Fixed 0 roots`），目前处于 **`[2/7] checking extents` 收尾清理阶段的最后一个元数据块组（`2.42 TB` 区间）**（正在严格单调递增回收旧 `root 7` 树块引用，日志已输出 `749,050` 行，已清理约 `124,836` 个旧 CSUM 叶子记录，推进至最终块组逻辑地址 `2,421,475,213,312`）。
-- **实时进度追踪记录（总需读取约 `1,704 GB` 已分配数据）**：
+- **完成结果**：
+  1. **`Creating a new CRC tree` 100% 完成**：全盘读取 `1,731.03 GB`，成功写入 `5.97 GB` 全新 `CSUM_TREE`；
+  2. **`[1/7] checking root items` 通过**（`Fixed 0 roots.`）；
+  3. **`[2/7] checking extents` 清理完成**：共输出 `790,128` 行日志，将旧 `root 7` 遗留的全部 **`131,683` 个未引用 16KB 叶子块记录**（从逻辑地址 `30,457,856` 一直到最后一个块组 `2,422,391,799,808`）逐一回收提交（superblock `generation` 推进至 `2907405`）；
+  4. 在 `[2/7]` 最后一步修正 `super bytes used` 时，因现有 `free-space-tree (v2)` 缓存与已回收的旧 extent 范围存在微小偏差触发 `remove_free_space_extent` 断言退出（`exit=134`），但此前全部新 `CSUM_TREE` 和 `131,683` 个旧 extent 删除事务均已安全落盘提交！
+- **全程进度追踪记录（归档）**：
 
 | 检查时间 | 已运行时间 | `/proc/113903/io` `read_bytes` | 已读取数据量 | 进度占比 | 阶段平均速度 | 报错数 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -95,6 +100,7 @@
 | `00:26:59` | `12h 25m` | `1,731,025,051,648` | `1,731.03 GB`（累计写入 `39.87 GB`） | **`[2/7] checking extents` 进行中** | 清理旧 `root 7` 引用中（日志 `498,261` 行，`~83,038` 个旧叶子已回收） | `0` |
 | `00:46:47` | `12h 45m` | `1,731,025,051,648` | `1,731.03 GB`（累计写入 `48.20 GB`） | **`[2/7] checking extents` 进行中** | 清理旧 `root 7` 引用中（日志 `618,675` 行，`~103,107` 个旧叶子已回收） | `0` |
 | `01:06:47` | `13h 05m` | `1,731,025,051,648` | `1,731.03 GB`（累计写入 `57.61 GB`） | **`[2/7] checking extents` 尾声（`2.42 TB` 块组）** | 清理旧 `root 7` 引用中（日志 `749,050` 行，`~124,836` 个旧叶子已回收） | `0` |
+| `01:13:14` | `13h 11m` | `1,731,025,051,648` | `1,731.03 GB`（累计写入 `~60.5 GB`） | **`FINISHED` ✅** | 全部 `131,683` 个旧 `root 7` 叶子引用回收完毕（日志 `790,128` 行） | `0`（末尾 `free-space-tree` 待重建） |
 
 - **预计完成时间**：按当前平均速度（`44 ~ 48 MB/s`），剩余约 `1,166 GB` 数据预计还需要 **6.5 ~ 7.5 小时**（大约今晚 **22:00 ~ 23:00** 左右完成）。**请勿中断该进程**。
 
