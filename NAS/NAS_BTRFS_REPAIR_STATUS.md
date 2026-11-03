@@ -1,7 +1,8 @@
 # 飞牛OS (fnOS) NAS BTRFS 存储空间不格式化修复交接文档
 
-**更新时间**：2026-11-03 10:43 CST  
-**原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。
+**更新时间**：2026-11-03 10:47 CST  
+**原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。  
+**最终状态**：**已 100% 修复完成并恢复读写挂载（`/vol1 rw`）及全部服务！🎉**
 
 ---
 
@@ -15,7 +16,7 @@
 | **数据盘设备路径** | `/dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（对应 `/dev/dm-0`） |
 | **BTRFS UUID** | `1fba27f1-61a3-4f3b-a155-cc4d2074f016` |
 | **SSD 缓存状态** | 已通过 `lvconvert --yes --splitcache` 永久剥离，当前为纯 HDD 线性逻辑卷（底层 `/dev/md127` -> `/dev/sda1`） |
-| **当前正在运行的后台任务** | **无（`--init-csum-tree` 与 `btrfs check --readonly` 均已完成！）** |
+| **当前正在运行的后台任务** | **全部修复与挂载已完成！`/vol1` 已正常 `rw` 挂载，Docker / SMB 服务已全面恢复运行 ✅** |
 | **当前任务日志路径** | NAS 本机 `/root/btrfs_readonly_nov3.log`（`--init-csum-tree` 历史日志 `/root/btrfs_init_csum.log`） |
 
 ---
@@ -163,24 +164,31 @@ file data blocks allocated: 2357123534848
 - **`[6/7] checking root refs`**：**0 报错** ✅
 - **唯一剩余收尾项（`[3/7] checking free space tree`）**：仅剩 4 个元数据块组的空闲空间缓存（`space_cache=v2`）因刚回收旧叶子需刷新，只需执行 `btrfs check --clear-space-cache v2` 清除旧缓存并在挂载时自动重建即可。
 
-### 3. 最终一键收尾与恢复服务步骤
-1. **清理 `v2` 空闲空间缓存并只读复检确认 100% 零错误（`exit=0`）**：
-   ```bash
-   btrfs check --clear-space-cache v2 /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0
-   btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0
+### 3. 最终收尾与恢复服务（2026-11-03 10:46 已全部执行完成 ✅）
+1. **清理 `v2` 空闲空间缓存（已完成，`CLEAR_EXIT=0`）**：
+   ```text
+   Clear free space cache v2
+   free space cache v2 cleared
    ```
-2. **挂载 `/vol1`（自动重建 `space_cache=v2`）并恢复服务**：
-   ```bash
-   mount -o space_cache=v2 /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 /vol1
-   btrfs device stats -z /vol1
-   systemctl start containerd docker smbd
+2. **挂载 `/vol1` 并由内核自动重建全新 `free-space-tree (v2)`（已完成 ✅）**：
+   ```text
+   /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 /vol1 btrfs rw,relatime,discard=async,space_cache=v2,subvolid=5,subvol=/ 0 0
+   Filesystem                                               Size  Used Avail Use% Mounted on
+   /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0  1.9T  1.6T  265G  86% /vol1
    ```
-3. **验证读写与内核日志**：
-   ```bash
-   cat /proc/mounts | grep /vol1
-   btrfs device stats /vol1
-   dmesg -T | grep -iE 'btrfs' | tail -20
+   内核 `dmesg` 确认空闲空间树已全新生成并启用：
+   ```text
+   [Tue Nov  3 10:45:01 2026] BTRFS info (device dm-0): creating free space tree
+   [Tue Nov  3 10:45:28 2026] BTRFS info (device dm-0): setting compat-ro feature flag for FREE_SPACE_TREE (0x1)
+   [Tue Nov  3 10:45:28 2026] BTRFS info (device dm-0): setting compat-ro feature flag for FREE_SPACE_TREE_VALID (0x2)
+   [Tue Nov  3 10:45:29 2026] BTRFS info (device dm-0): checking UUID tree
+   [Tue Nov  3 10:45:29 2026] BTRFS info (device dm-0): turning on async discard
+   [Tue Nov  3 10:45:29 2026] BTRFS info (device dm-0): enabling free space tree
    ```
+3. **20MB 读写落盘压测 + 恢复 `containerd` / `docker` / `smbd` 服务（已完成 ✅）**：
+   - `dd` 写入 20MB 随机数据并 `sync` + 删除 `sync`：**`WRITE_TEST_OK`**，不再触发 `write time tree block corruption` 或掉只读！
+   - `btrfs device stats /vol1` 全部 5 项错误计数器均为 **`0`**！
+   - `containerd`、`docker`（含 `1Panel-ddns-go` 容器）、`smbd` 已全部正常启动并稳定运行！
 
 ---
 
