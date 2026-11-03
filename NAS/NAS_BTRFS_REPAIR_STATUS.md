@@ -1,8 +1,8 @@
 # 飞牛OS (fnOS) NAS BTRFS 存储空间不格式化修复交接文档
 
-**更新时间**：2026-11-03 10:47 CST  
+**更新时间**：2026-11-03 14:28 CST  
 **原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。  
-**最终状态**：**已 100% 修复完成并恢复读写挂载（`/vol1 rw`）及全部服务！🎉**
+**最终状态**：**已 100% 修复完成，并通过整机重启（`reboot`）验证开机自动 `rw` 挂载及服务自启！🎉**
 
 ---
 
@@ -189,6 +189,13 @@ file data blocks allocated: 2357123534848
    - `dd` 写入 20MB 随机数据并 `sync` + 删除 `sync`：**`WRITE_TEST_OK`**，不再触发 `write time tree block corruption` 或掉只读！
    - `btrfs device stats /vol1` 全部 5 项错误计数器均为 **`0`**！
    - `containerd`、`docker`（含 `1Panel-ddns-go` 容器）、`smbd` 已全部正常启动并稳定运行！
+4. **整机重启（`reboot`）开机自动挂载与读写验证（2026-11-03 14:27 完成 ✅）**：
+   - 重启前连续运行 3 小时 40 分钟保持 `rw` 零错误（`PRE_REBOOT_RW_OK`）。
+   - 执行 `reboot` 整机重启后，飞牛 OS 原生存储服务在 **2 秒内（`14:26:08` -> `14:26:10`）开机自动挂载 `/vol1` 为 `rw`**（含 `trimacl,space_cache=v2`）：
+     ```text
+     /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 /vol1 btrfs rw,relatime,discard=async,trimacl,space_cache=v2,subvolid=5,subvol=/ 0 0
+     ```
+   - 重启后读写测试通过（`POST_REBOOT_RW_OK`），`btrfs device stats /vol1` 全部 5 项计数保持 **`0`**，Docker 容器与 FRP 隧道全部随开机自动恢复，内核 `dmesg` **100% 干净零报错**！
 
 ---
 
