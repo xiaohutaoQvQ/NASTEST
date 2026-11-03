@@ -1,6 +1,6 @@
 # 飞牛OS (fnOS) NAS BTRFS 存储空间不格式化修复交接文档
 
-**更新时间**：2026-11-03 09:56 CST  
+**更新时间**：2026-11-03 10:43 CST  
 **原则**：**绝不格式化（不格式化修复）**，保留 1.55 TiB 全部用户数据。
 
 ---
@@ -15,7 +15,7 @@
 | **数据盘设备路径** | `/dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（对应 `/dev/dm-0`） |
 | **BTRFS UUID** | `1fba27f1-61a3-4f3b-a155-cc4d2074f016` |
 | **SSD 缓存状态** | 已通过 `lvconvert --yes --splitcache` 永久剥离，当前为纯 HDD 线性逻辑卷（底层 `/dev/md127` -> `/dev/sda1`） |
-| **当前正在运行的后台任务** | **`PID 189471`**：`btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0`（`09:55:37` 已扫描 `2.55 GB / 5.41 GB` 元数据树，`~47.1%`，`[1/7]`、`[2/7]` 零报错） |
+| **当前正在运行的后台任务** | **无（`--init-csum-tree` 与 `btrfs check --readonly` 均已完成！）** |
 | **当前任务日志路径** | NAS 本机 `/root/btrfs_readonly_nov3.log`（`--init-csum-tree` 历史日志 `/root/btrfs_init_csum.log`） |
 
 ---
@@ -126,14 +126,52 @@ iostat -xm 2 3 /dev/sda
 ```
 > **注意**：在 `Creating a new CRC tree` 阶段，工具会先清空旧 `CSUM_TREE` 并遍历全盘数据块计算 CRC，期间日志可能长时间停留在 `10 9 8 7 6 5 4 3 2 1` 而不输出新行（因为 `btrfs check` 缓冲输出且计算阶段无报错不打印），只要 `pgrep -a btrfs` 还在且 `cat /proc/113903/io` 的 `read_bytes` 在持续增长，就说明一切正常！
 
-### 2. 当 `/root/btrfs_init_csum.log` 显示 `=== INIT CSUM TREE FINISHED ===` 后的收尾步骤
-1. **只读复检确认零错误**：
+### 2. `btrfs check --readonly` 完整复检结果（2026-11-03 10:42 完成 ✅）
+`/root/btrfs_readonly_nov3.log` 完整输出仅 26 行，核心树结构与校验和树**全部零错误通过**：
+```text
+Opening filesystem to check...
+Checking filesystem on /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0
+UUID: 1fba27f1-61a3-4f3b-a155-cc4d2074f016
+[1/7] checking root items
+[2/7] checking extents
+[3/7] checking free space tree
+wanted bytes 81920, found 16384 for off 30441472
+cache appears valid but isn't 30408704
+there is no free space entry for 776346566656-776346583040
+cache appears valid but isn't 776345747456
+there is no free space entry for 1867267506176-1867267522560
+cache appears valid but isn't 1867267440640
+there is no free space entry for 2421355757568-2421355773952
+cache appears valid but isn't 2421318221824
+[4/7] checking fs roots
+[5/7] checking only csums items (without verifying data)
+[6/7] checking root refs
+[7/7] checking quota groups skipped (not enabled on this FS)
+found 1704134660096 bytes used, error(s) found
+total csum bytes: 1661590036
+total tree bytes: 2666463232
+total fs tree bytes: 771620864
+total extent tree bytes: 86360064
+btree space waste bytes: 318495387
+file data blocks allocated: 2357123534848
+ referenced 1705084125184
+```
+- **`[1/7] checking root items`**：**0 报错** ✅
+- **`[2/7] checking extents`**：**0 报错** ✅（`131,683` 个旧 `root 7` 未引用块已彻底清空，`total tree bytes` 从 `5.41 GB` 降至健康的 `2.67 GB`！）
+- **`[4/7] checking fs roots`**：**0 报错** ✅（此前所有的 `some csum missing` 已 100% 消失！）
+- **`[5/7] checking only csums items`**：**0 报错** ✅（孤儿校验和与重叠范围已 100% 消除！）
+- **`[6/7] checking root refs`**：**0 报错** ✅
+- **唯一剩余收尾项（`[3/7] checking free space tree`）**：仅剩 4 个元数据块组的空闲空间缓存（`space_cache=v2`）因刚回收旧叶子需刷新，只需执行 `btrfs check --clear-space-cache v2` 清除旧缓存并在挂载时自动重建即可。
+
+### 3. 最终一键收尾与恢复服务步骤
+1. **清理 `v2` 空闲空间缓存并只读复检确认 100% 零错误（`exit=0`）**：
    ```bash
+   btrfs check --clear-space-cache v2 /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0
    btrfs check --readonly /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0
    ```
-2. **挂载 `/vol1` 并恢复服务**：
+2. **挂载 `/vol1`（自动重建 `space_cache=v2`）并恢复服务**：
    ```bash
-   mount /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 /vol1
+   mount -o space_cache=v2 /dev/mapper/trim_a23eb205_06da_4983_abf4_f750b63e6eb2-0 /vol1
    btrfs device stats -z /vol1
    systemctl start containerd docker smbd
    ```
